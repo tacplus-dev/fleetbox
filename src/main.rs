@@ -15,14 +15,17 @@ const USAGE: &str = "usage:
   fleetbox [run] [--manifest PATH] [--uni-config PATH] [--run-dir DIR] [--fail-fast]
   fleetbox check [--manifest PATH]
   fleetbox health [--run-dir DIR]
+  fleetbox image --lock PATH [--manifest PATH] --out DIR
 
   --manifest PATH     the fleet build's manifest (default /etc/fleetbox/manifest.yaml)
   --uni-config PATH   the deployment's uni-config, each service's config is rendered from
   --run-dir DIR       rendered config and status.json (default /run/fleetbox)
   --fail-fast         exit on the first crash of any service instead of restarting it (for tests)
+  --lock PATH         image: the fleet's box lock, every image by digest
+  --out DIR           image: where the box's Dockerfile and manifest.yaml (its build context) are written
 
 exit status: 0 stopped by SIGTERM or SIGINT (health: healthy); 1 the kernel died, a service crashed
-with --fail-fast, or the box is not healthy; 2 a usage, manifest or uni-config error";
+with --fail-fast, or the box is not healthy; 2 a usage, manifest, uni-config or box lock error";
 
 struct Args {
     command: String,
@@ -30,6 +33,8 @@ struct Args {
     uni_config: Option<PathBuf>,
     run_dir: PathBuf,
     fail_fast: bool,
+    lock: Option<PathBuf>,
+    out: Option<PathBuf>,
 }
 
 fn usage_error(msg: &str) -> ! {
@@ -44,6 +49,8 @@ fn parse_args() -> Args {
         uni_config: None,
         run_dir: "/run/fleetbox".into(),
         fail_fast: false,
+        lock: None,
+        out: None,
     };
     let mut it = std::env::args().skip(1).peekable();
     if let Some(c) = it.peek().filter(|c| !c.starts_with('-')) {
@@ -61,6 +68,8 @@ fn parse_args() -> Args {
             "--uni-config" => a.uni_config = Some(value().into()),
             "--run-dir" => a.run_dir = value().into(),
             "--fail-fast" if inline.is_none() => a.fail_fast = true,
+            "--lock" => a.lock = Some(value().into()),
+            "--out" => a.out = Some(value().into()),
             "-h" | "--help" => {
                 println!("{USAGE}");
                 exit(0)
@@ -101,8 +110,29 @@ fn main() {
                 exit(1)
             }
         },
+        "image" => image(args),
         c => usage_error(&format!("unknown command {c}")),
     }
+}
+
+/// Writes the box's build context: its Dockerfile, and the manifest it copies (docs/USER.md, The image).
+fn image(args: Args) {
+    let (Some(lock), Some(out)) = (&args.lock, &args.out) else { usage_error("image needs --lock and --out") };
+    let m = load(&args.manifest);
+    let fail = |e: String| -> ! {
+        logs::say(e);
+        exit(2)
+    };
+    let lock = fleetbox::image::Lock::load(lock).unwrap_or_else(|e| fail(e.to_string()));
+    let dockerfile = fleetbox::image::dockerfile(&lock, &m).unwrap_or_else(|e| fail(e.to_string()));
+    let write = |name: &str, bytes: &[u8]| {
+        let path = out.join(name);
+        std::fs::write(&path, bytes).unwrap_or_else(|e| fail(format!("{}: {e}", path.display())));
+    };
+    std::fs::create_dir_all(out).unwrap_or_else(|e| fail(format!("{}: {e}", out.display())));
+    // The manifest as it was read and checked, byte for byte.
+    write("manifest.yaml", &std::fs::read(&args.manifest).unwrap_or_else(|e| fail(format!("{}: {e}", args.manifest.display()))));
+    write("Dockerfile", dockerfile.as_bytes());
 }
 
 fn run(args: Args) {

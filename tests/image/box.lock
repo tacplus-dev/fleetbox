@@ -1,0 +1,20 @@
+# The test box's lock (image/smoke.sh). Its fleetbox image is the one the smoke builds from this checkout: it pushes
+# it to a local registry and writes its digest over the placeholder below. Every other image is public, by digest:
+# busybox:1.38.0, resolved 2026-11-22 (the digest tacplus-dev/kernel's Dockerfile pins).
+version: 1
+fleetbox: localhost:5000/fleetbox@sha256:0000000000000000000000000000000000000000000000000000000000000000
+gateway: gateway
+services:
+  - name: kernel
+    image: busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
+    copy:
+      - {from: /bin/busybox, to: /opt/kernel/busybox}
+  - name: eventbus
+    image: busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
+    copy:
+      - {from: /etc, to: /opt/eventbus/www}
+  - name: gateway
+    image: busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
+    copy:
+      - {from: /bin/busybox, to: /opt/gateway/busybox}
+      - {from: /etc/group, to: /opt/gateway/www/index.html}

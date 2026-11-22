@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod health;
+pub mod image;
 pub mod logs;
 pub mod manifest;
 pub mod readiness;

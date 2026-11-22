@@ -19,3 +19,17 @@ Loopers propose here; Jody decides, and an accepted proposal becomes a ROADMAP l
   exactly what each service needs inside one container.
 - **A `build.lock`.** The gates run in the manager's job (looper#71) until the hub's pin issue gives this repository a
   `build.lock` with a Rust build image.
+- **The fleet build writes the box lock.** `fleetbox image` reads a box lock (docs/USER.md, The box lock: the
+  fleetbox image and each service's release image by digest, and the files the box takes from each), because
+  `fleet.lock` names commits, not images. With `box: true` in a `fleet.yaml`, `tacplus fleet build` would write it
+  beside the manifest from the images it built or resolved, each service's copies from what its language's image
+  holds (a jar at `/app/<name>.jar`, a binary at `/usr/local/bin/<name>`, the gateway's `/opt/tacplus/`): a change
+  in tacplus-dev/tacplus, on the decision's "part of the fleet build, when enabled".
+- **The fleetbox image as a release.** A box is built on the fleetbox image by digest. The build pipeline's publish
+  job builds a repository's `Dockerfile` on a release, so fleetbox's first release publishes it
+  (`us-docker.pkg.dev/jody1-328023/tacplus/fleetbox:X.Y.Z`), for amd64 and arm64; until then only the image
+  workflow's smoke builds it, and pushes it nowhere.
+- **Writable data for the services.** The box has one writable directory, `/run/fleetbox`, the supervisor's. A
+  service that keeps state on disk (the kernel's `/app/data`, stratum's) needs its own, owned by the box's user,
+  and a volume to outlive the container. The end-to-end check (#3) will show which; a manifest field (`data:`), or
+  the supervisor making `<data-dir>/<service>` and passing it as `{data}`, would give it.

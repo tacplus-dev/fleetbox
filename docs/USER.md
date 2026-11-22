@@ -10,6 +10,7 @@ tacplus-dev/roadmap `decisions/fleetbox-2026-11-22.md`.
 fleetbox [run] [--manifest PATH] [--uni-config PATH] [--run-dir DIR] [--fail-fast]
 fleetbox check [--manifest PATH]
 fleetbox health [--run-dir DIR]
+fleetbox image --lock PATH [--manifest PATH] --out DIR
 ```
 
 | Flag | Default | What |
@@ -18,11 +19,14 @@ fleetbox health [--run-dir DIR]
 | `--uni-config` | none | the deployment's uni-config: each service's config is rendered from it ([Config](#config)) |
 | `--run-dir` | `/run/fleetbox` | where the rendered config (`config/`) and the box's status (`status.json`) go |
 | `--fail-fast` | off | exit on the first crash of any service instead of restarting it: for tests |
+| `--lock` | none | `image`: the fleet's box lock ([The image](#the-image)) |
+| `--out` | none | `image`: the directory the box's build context is written to |
 
 - `run` (the default) runs the box until it is stopped by a signal, or until it fails.
 - `check` validates a manifest and prints its start order. The fleet build can run it on the manifest it writes.
 - `health` prints the box's state and each service's, and exits 0 only when the box is healthy. It is the
   image's `HEALTHCHECK`.
+- `image` writes a box's build context from its box lock and manifest ([The image](#the-image)).
 
 Exit status:
 
@@ -30,7 +34,7 @@ Exit status:
 |---|---|
 | 0 | stopped by SIGTERM or SIGINT, with every service stopped (`health`: the box is healthy) |
 | 1 | the kernel died or was never ready, or with `--fail-fast` a service crashed or was never ready. Every service is stopped first. (`health`: the box is not healthy.) |
-| 2 | a usage, manifest or uni-config error. Nothing was started. |
+| 2 | a usage, manifest, uni-config or box lock error. Nothing was started (`image`: nothing was written). |
 
 ## The manifest
 
@@ -212,6 +216,73 @@ eventbus: ready (restarts 0)
 kernel: ready (restarts 0)
 oauth: ready (restarts 2)
 ```
+
+## The image
+
+A fleet's box is one image, built in two layers of images, every one by digest and nothing rebuilt:
+
+- **The fleetbox image** ([Dockerfile](../Dockerfile)): the supervisor at `/usr/local/bin/fleetbox`, on the Java 25
+  runtime the kernel's release image runs on (distroless `java25-debian13`: `/usr/bin/java`, Debian 13's glibc, no
+  shell and no setuid binary), its run directory `/run/fleetbox` the box user's alone. It is the same for every fleet.
+- **The box**, built on it: each service's files copied from the service's release image, and the fleet's manifest at
+  `/etc/fleetbox/manifest.yaml`. `fleetbox image` writes its `Dockerfile` from the fleet's **box lock** and checks
+  the two against each other first.
+
+```sh
+fleetbox image --lock box.lock --manifest manifest.yaml --out box/
+docker build --platform linux/arm64 -t <fleet>-box box/
+docker run -p 8443:8443 <fleet>-box [run] [--uni-config PATH] [--fail-fast]
+```
+
+The box runs as `65532:65532` (distroless's `nonroot`), needs no capability (it runs with `--cap-drop ALL` and
+`no-new-privileges`), exposes the gateway's ports alone (the services talk to each other inside it), and its
+`HEALTHCHECK` is `fleetbox health` ([Health](#health)), with a start period of the manifest's longest chain of
+readiness timeouts. Its entrypoint is the supervisor and its command `run`: arguments after the image replace `run`
+(`--uni-config`, `--fail-fast`). arm64 first (the cluster and Jody's Macs are arm64); amd64 is on the roadmap.
+
+### The box lock
+
+The fleet build writes it beside the manifest. Like the manifest it is versioned, version **1**, and refuses any other
+version and any field it does not know.
+
+```yaml
+version: 1
+fleetbox: us-docker.pkg.dev/jody1-328023/tacplus/fleetbox:0.2.0@sha256:…   # the fleetbox image
+gateway: gateway                                                          # the service whose ports are exposed
+services:
+  - name: kernel
+    image: us-docker.pkg.dev/jody1-328023/tacplus/kernel:1.4.0@sha256:…
+    copy:
+      - {from: /app/kernel.jar, to: /opt/kernel/kernel.jar}
+  - name: gateway
+    image: us-docker.pkg.dev/jody1-328023/tacplus/gateway:2.1.0@sha256:…
+    copy:
+      - {from: /usr/local/bin/gateway, to: /opt/gateway/gateway}
+      - {from: /opt/tacplus/webapp, to: /opt/tacplus/webapp}
+```
+
+| Field | What |
+|---|---|
+| `fleetbox` | the fleetbox image the box is built on |
+| `gateway` | the manifest's gateway service: its `ports` are the box's `EXPOSE`, and it has at least one |
+| `services[].name` | a service of the manifest. Every service of the manifest is in the lock, and only those. |
+| `services[].image` | its release image |
+| `services[].copy` | what the box takes from that image, at least one: a file or a directory (`from`), and where it goes (`to`) |
+
+Every image is `<name>[:tag]@sha256:<digest>`: a tag alone could move under the lock. Every path is absolute, of
+letters, digits and `._+@=,:-` alone, with no `.` or `..` component, so the `Dockerfile` reads it as it is. No two
+copies land on or under one another, nor on the fleetbox image's own (`/usr/local/bin/fleetbox`, `/etc/fleetbox`,
+`/run/fleetbox`, `/usr/bin/java`). Each service's `binary` in the manifest is the Java runtime, `/usr/bin/java` (a
+Java service, its jar among its copies), or a path its own copies put in the box. Copied files keep their mode and
+belong to root: a service cannot change its own binary.
+
+### Checking an image
+
+`image/smoke.sh` (`just smoke`) builds the fleetbox image from the checkout, a box on it from the test lock
+([tests/image/](../tests/image)), and runs that box: it must be healthy with no capability, its services running as
+`65532`, its gateway answering on its published port, its Java service on the image's runtime, and it must stop
+with status 0 on SIGTERM. It needs Docker and a registry to push the fleetbox image to, for its digest
+(`REGISTRY`, `localhost:5000`): the image workflow runs it on arm64 for every change.
 
 ## Building
 

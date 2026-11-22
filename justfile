@@ -21,5 +21,11 @@ test: build
 # The gates every change passes before it lands.
 gates: check-tracked test
 
+# The image's check (image/smoke.sh): builds the fleetbox image and a box on it from the test lock, and runs it. It
+# needs Docker and a registry at $REGISTRY (localhost:5000), so it is the image workflow's (.github/workflows/image.yml),
+# not a gate: the gates run with no container runtime.
+smoke:
+  image/smoke.sh
+
 clean:
   rm -rf target

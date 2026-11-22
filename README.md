@@ -19,10 +19,17 @@ service with backoff (`--fail-fast` for tests), prefixes each service's log line
 service's config from the deployment's uni-config. The manifest format and everything else:
 [docs/USER.md](docs/USER.md).
 
+## The image
+
+A box is the fleetbox image ([Dockerfile](Dockerfile): the supervisor on the Java runtime the kernel runs on, as an
+unprivileged user) with each service's files copied from its release image by digest and the fleet's manifest.
+`fleetbox image` writes its `Dockerfile` from the fleet's box lock: [docs/USER.md](docs/USER.md#the-image).
+
 ## Building
 
 The gates, `just gates` ([justfile](justfile)): `cargo build --all-targets --locked` and `cargo test --locked`. The
 tests run the supervisor against stand-in child processes (`/bin/sh` scripts), in process (`src/*_tests.rs`) and as
 the binary a container runs (`tests/binary.rs`, which signals it and reads its output). fleetbox is no tacplus project:
-it has no `tacplus.yaml` and generates nothing. The security checks' cargo-deny reads [deny.toml](deny.toml),
+it has no `tacplus.yaml` and generates nothing. The image's check, `just smoke` (image/smoke.sh), needs Docker, which no
+gate has: the image workflow runs it, on arm64. The security checks' cargo-deny reads [deny.toml](deny.toml),
 looper-scan's default policy.

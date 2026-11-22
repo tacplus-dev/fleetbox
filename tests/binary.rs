@@ -176,3 +176,33 @@ fn a_bad_manifest_exits_2_before_anything_starts() {
     assert!(out.status.success());
     assert!(String::from_utf8_lossy(&out.stdout).contains("version 1, 2 services, start order kernel, a"));
 }
+
+#[test]
+fn image_writes_the_boxs_build_context_from_its_lock_and_manifest() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("box");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/image");
+    let (lock, m) = (fixtures.join("box.lock"), fixtures.join("manifest.yaml"));
+    let run = |lock: &Path| {
+        Command::new(BIN)
+            .args(["image", "--lock", lock.to_str().unwrap(), "--manifest", m.to_str().unwrap(), "--out", out.to_str().unwrap()])
+            .output()
+            .unwrap()
+    };
+    let o = run(&lock);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(std::fs::read(out.join("manifest.yaml")).unwrap(), std::fs::read(&m).unwrap());
+    let d = std::fs::read_to_string(out.join("Dockerfile")).unwrap();
+    assert!(d.contains("\nFROM localhost:5000/fleetbox@sha256:"), "{d}");
+    assert!(d.contains("/bin/busybox /opt/gateway/busybox\n"), "{d}");
+    assert!(d.contains("\nEXPOSE 8443\n"), "{d}");
+
+    let bad = dir.path().join("bad.lock");
+    std::fs::write(&bad, std::fs::read_to_string(&lock).unwrap().replace("name: eventbus", "name: oauth")).unwrap();
+    let o = run(&bad);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("service oauth: in the box lock and not in the manifest"));
+
+    let o = Command::new(BIN).args(["image", "--manifest", m.to_str().unwrap()]).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+}

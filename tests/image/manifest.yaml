@@ -1,0 +1,22 @@
+# The test box's manifest (image/smoke.sh): stand-ins for a fleet, from public images by digest (box.lock), each
+# service a real process the supervisor starts, waits on and stops. The kernel and the gateway are busybox's httpd;
+# eventbus is a Java service on the fleetbox image's Java runtime, the JDK's own web server.
+version: 1
+kernel: kernel
+services:
+  - name: kernel
+    binary: /opt/kernel/busybox
+    args: [httpd, -f, -p, "127.0.0.1:5701", -h, /opt/kernel]
+    ports: [5701]
+    readiness: {tcp: {port: 5701}, timeout_seconds: 30}
+  - name: eventbus
+    binary: /usr/bin/java
+    args: [-m, jdk.httpserver, -b, 127.0.0.1, -p, "9000", -d, /opt/eventbus/www]
+    ports: [9000]
+    readiness: {http: {port: 9000, path: /}, timeout_seconds: 60}
+  - name: gateway
+    binary: /opt/gateway/busybox
+    args: [httpd, -f, -p, "8443", -h, /opt/gateway/www]
+    ports: [8443]
+    depends_on: [eventbus]
+    readiness: {tcp: {port: 8443}, timeout_seconds: 30}
