@@ -10,3 +10,19 @@ processes under a small supervisor.
   built from its lock.
 
 Design: tacplus-dev/roadmap `decisions/fleetbox-2026-11-22.md`. Rust. Apache-2.0.
+
+## The supervisor
+
+`fleetbox`, the box's PID 1: it reads the manifest the fleet build writes, starts the kernel and then each service once
+its dependencies are ready, forwards SIGTERM/SIGINT and stops the services in reverse order, restarts a crashed
+service with backoff (`--fail-fast` for tests), prefixes each service's log lines with its name, and renders each
+service's config from the deployment's uni-config. The manifest format and everything else:
+[docs/USER.md](docs/USER.md).
+
+## Building
+
+The gates, `just gates` ([justfile](justfile)): `cargo build --all-targets --locked` and `cargo test --locked`. The
+tests run the supervisor against stand-in child processes (`/bin/sh` scripts), in process (`src/*_tests.rs`) and as
+the binary a container runs (`tests/binary.rs`, which signals it and reads its output). fleetbox is no tacplus project:
+it has no `tacplus.yaml` and generates nothing. The security checks' cargo-deny reads [deny.toml](deny.toml),
+looper-scan's default policy.

@@ -1,0 +1,21 @@
+[package]
+name = "fleetbox"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "The fleetbox supervisor: PID 1 of a container that runs a whole tacplus fleet"
+
+[dependencies]
+# The manifest and the uni-config are YAML (or JSON, which YAML reads) (src/manifest.rs, src/config.rs). A YAML
+# parser in safe Rust: serde_yaml and its forks rest on unsafe-libyaml, unmaintained (RUSTSEC-2024-0449).
+serde = { version = "1", features = ["derive"] }
+serde-saphyr = "2"
+serde_json = "1"
+# kill(2), waitpid(2), prctl(2): the supervisor signals process groups and reaps every child (src/reaper.rs).
+libc = "0.2"
+# SIGTERM, SIGINT and SIGCHLD delivered to a thread, not an async handler (src/main.rs, src/reaper.rs).
+signal-hook = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+
