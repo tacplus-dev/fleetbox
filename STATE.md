@@ -1,6 +1,6 @@
 # State: fleetbox
 
-Last updated: 2026-11-22 by the looper (#2).
+Last updated: 2026-11-23 by the looper (#4).
 
 **Version:** none released.
 
@@ -19,9 +19,16 @@ runtime the kernel runs on, as 65532, its HEALTHCHECK `fleetbox health`), and `f
 the box copies from each) checked against the manifest, exposing the gateway's ports alone. `image/smoke.sh` builds
 and runs a box from the test lock (tests/image/); it needs Docker, so no gate runs it.
 
+Running a box by hand (#4; docs/USER.md, Running a box by hand): `fleetbox init`, run from the box's image, writes a
+config directory (`uni-config.yaml` in the uni-config's shape with the domain and the gateway's port, the manifest,
+`compose.yaml`, and `admin.yaml`, the admin account with a random password, 0600), every file the directory's owner's;
+a re-run regenerates all but `admin.yaml`. `docker compose up` / `down` there starts and stops the box, run as that
+owner, only the gateway's port published. The README shows the commands.
+
 **Gaps:** the uni-config is read as a document, after operator#17's schema on its branch, which has not landed
 (PROPOSALS.md). There is no per-process chassis bootstrap config yet. Nothing runs the image's smoke yet: its workflow (`.github/workflows/image.yml`, on
 arm64) needs the looper's workflows permission on #2, so neither image has been built yet. No fleet build writes a box
-lock, and the fleetbox image is not published (PROPOSALS.md). There is no end-to-end check (#3).
+lock, and the fleetbox image is not published (PROPOSALS.md). There is no end-to-end check (#3): no gate has Docker, so `init`'s `compose.yaml` has not been run, only checked. Nothing
+reads `admin.yaml` until `init --keycloak` (#5). A re-run of `init` replaces what was set in `uni-config.yaml` (PROPOSALS.md).
 
 **Blockers:** none.
