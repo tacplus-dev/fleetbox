@@ -8,8 +8,8 @@ deployment that runs on minimal resources.
 - **It scales:** container → compose → cluster with the same binaries.
 - **A test harness:** any service with fleet dependencies can be tested against a box, without a full deployment.
 - **Simple deployments, by hand:** run the image with flags and it writes a config directory (the fleet's config, an
-  admin account file, a `compose.yaml` and a `start.sh`) and exits; then `docker compose up` or `./start.sh`. No
-  pipeline needed.
+  admin account file, a `compose.yaml` and a `start.sh`) and exits; then Compose `up` or `./start.sh`. No pipeline,
+  and no Docker assumed: Docker, Podman, nerdctl or Apple's `container` all run it.
 - **Its own sign-in, optional:** `--keycloak` adds a Keycloak, on its own port, with a realm matching the
   config, so a box needs no external sign-in provider.
 - **Part of the fleet build, when enabled:** a fleet with `box: true` in its `fleet.yaml` also gets a fleetbox image
