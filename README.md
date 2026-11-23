@@ -7,9 +7,10 @@ deployment that runs on minimal resources.
 - **Real, not a mock:** the same release binaries a cluster runs, and a real kernel (one Hazelcast member).
 - **It scales:** container → compose → cluster with the same binaries.
 - **A test harness:** any service with fleet dependencies can be tested against a box, without a full deployment.
-- **Simple deployments, by hand:** `fleetbox init` writes a config directory (the fleet's config, an admin account
-  file, a `compose.yaml`); `docker compose up` starts it. No pipeline needed.
-- **Its own sign-in, optional:** `fleetbox init --keycloak` adds a Keycloak, on its own port, with a realm matching the
+- **Simple deployments, by hand:** run the image with flags and it writes a config directory (the fleet's config, an
+  admin account file, a `compose.yaml` and a `start.sh`) and exits; then `docker compose up` or `./start.sh`. No
+  pipeline needed.
+- **Its own sign-in, optional:** `--keycloak` adds a Keycloak, on its own port, with a realm matching the
   config, so a box needs no external sign-in provider.
 - **Part of the fleet build, when enabled:** a fleet with `box: true` in its `fleet.yaml` also gets a fleetbox image
   built from its lock.
