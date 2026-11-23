@@ -31,6 +31,23 @@ A box is the fleetbox image ([Dockerfile](Dockerfile): the supervisor on the Jav
 unprivileged user) with each service's files copied from its release image by digest and the fleet's manifest.
 `fleetbox image` writes its `Dockerfile` from the fleet's box lock: [docs/USER.md](docs/USER.md#the-image).
 
+## Running a box by hand
+
+From nothing to a running box, with Docker alone (`<box>` is a fleet's box image):
+
+```sh
+mkdir fleetbox
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> init --image <box>
+docker compose -f fleetbox/compose.yaml up -d
+```
+
+`fleetbox init` writes the config directory, every file yours: the fleet's deployment config in the uni-config's shape
+(`uni-config.yaml`), the box's manifest, `compose.yaml` (the gateway on 8443; `--port`, `--domain`) and `admin.yaml`,
+the admin account with a random password, readable by you alone. **`admin.yaml` never goes in a repository** (the
+directory's `.gitignore` leaves it out). Re-running `init` regenerates everything but `admin.yaml`.
+`docker compose -f fleetbox/compose.yaml down` stops the box. The rest:
+[docs/USER.md](docs/USER.md#running-a-box-by-hand).
+
 ## Building
 
 The gates, `just gates` ([justfile](justfile)): `cargo build --all-targets --locked` and `cargo test --locked`. The

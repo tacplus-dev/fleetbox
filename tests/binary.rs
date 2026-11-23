@@ -206,3 +206,40 @@ fn image_writes_the_boxs_build_context_from_its_lock_and_manifest() {
     let o = Command::new(BIN).args(["image", "--manifest", m.to_str().unwrap()]).output().unwrap();
     assert_eq!(o.status.code(), Some(2));
 }
+
+#[test]
+fn init_writes_a_config_directory_and_keeps_its_admin_account() {
+    let dir = tempfile::tempdir().unwrap();
+    // Under root (a CI job), a directory of root's is refused: give it to nobody, as whose owner init writes.
+    // SAFETY: geteuid(2) takes nothing and cannot fail.
+    if unsafe { libc::geteuid() } == 0 {
+        std::os::unix::fs::chown(dir.path(), Some(65534), Some(65534)).unwrap();
+    }
+    let d = dir.path();
+    let m = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/image/manifest.yaml");
+    let init = |extra: &[&str]| {
+        let mut args = vec!["init", "--config-dir", d.to_str().unwrap(), "--manifest", m.to_str().unwrap()];
+        args.extend_from_slice(extra);
+        Command::new(BIN).args(args).output().unwrap()
+    };
+    let o = init(&["--image", "fleetbox-box:test", "--port", "9443", "--domain", "box.test"]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    for f in ["admin.yaml", "uni-config.yaml", "manifest.yaml", "compose.yaml", ".gitignore"] {
+        assert!(d.join(f).is_file(), "no {f}");
+    }
+    let compose = std::fs::read_to_string(d.join("compose.yaml")).unwrap();
+    assert!(compose.contains("image: \"fleetbox-box:test\"\n") && compose.contains("- \"9443:8443\"\n"), "{compose}");
+    assert!(std::fs::read_to_string(d.join("uni-config.yaml")).unwrap().contains("fqdn: \"box.test\"\n"));
+    let admin = std::fs::read(d.join("admin.yaml")).unwrap();
+
+    let o = init(&["--image", "fleetbox-box:test"]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("admin.yaml: kept"));
+    assert_eq!(std::fs::read(d.join("admin.yaml")).unwrap(), admin);
+    assert!(std::fs::read_to_string(d.join("compose.yaml")).unwrap().contains("- \"8443:8443\"\n"));
+
+    for bad in [&[][..], &["--image", "fleetbox-box:test", "--port", "70000"][..], &["--image", "a b"][..]] {
+        let o = init(bad);
+        assert_eq!(o.status.code(), Some(2), "{bad:?}");
+    }
+}

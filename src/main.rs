@@ -16,6 +16,7 @@ const USAGE: &str = "usage:
   fleetbox check [--manifest PATH]
   fleetbox health [--run-dir DIR]
   fleetbox image --lock PATH [--manifest PATH] --out DIR
+  fleetbox init --image IMAGE [--config-dir DIR] [--manifest PATH] [--domain NAME] [--port N] [--gateway NAME]
 
   --manifest PATH     the fleet build's manifest (default /etc/fleetbox/manifest.yaml)
   --uni-config PATH   the deployment's uni-config, each service's config is rendered from
@@ -23,9 +24,14 @@ const USAGE: &str = "usage:
   --fail-fast         exit on the first crash of any service instead of restarting it (for tests)
   --lock PATH         image: the fleet's box lock, every image by digest
   --out DIR           image: where the box's Dockerfile and manifest.yaml (its build context) are written
+  --image IMAGE       init: the box's image, which compose.yaml runs
+  --config-dir DIR    init: the config directory it writes, which must exist (default /config)
+  --domain NAME       init: the fleet's domain (default localhost)
+  --port N            init: the gateway's port on the host (default 8443)
+  --gateway NAME      init: the manifest's gateway service, whose first port is published (default gateway)
 
 exit status: 0 stopped by SIGTERM or SIGINT (health: healthy); 1 the kernel died, a service crashed
-with --fail-fast, or the box is not healthy; 2 a usage, manifest, uni-config or box lock error";
+with --fail-fast, or the box is not healthy; 2 a usage, manifest, uni-config, box lock or init error";
 
 struct Args {
     command: String,
@@ -35,6 +41,8 @@ struct Args {
     fail_fast: bool,
     lock: Option<PathBuf>,
     out: Option<PathBuf>,
+    config_dir: PathBuf,
+    init: fleetbox::init::Options,
 }
 
 fn usage_error(msg: &str) -> ! {
@@ -51,6 +59,8 @@ fn parse_args() -> Args {
         fail_fast: false,
         lock: None,
         out: None,
+        config_dir: fleetbox::init::MOUNT.into(),
+        init: Default::default(),
     };
     let mut it = std::env::args().skip(1).peekable();
     if let Some(c) = it.peek().filter(|c| !c.starts_with('-')) {
@@ -70,6 +80,11 @@ fn parse_args() -> Args {
             "--fail-fast" if inline.is_none() => a.fail_fast = true,
             "--lock" => a.lock = Some(value().into()),
             "--out" => a.out = Some(value().into()),
+            "--image" => a.init.image = value(),
+            "--config-dir" => a.config_dir = value().into(),
+            "--domain" => a.init.domain = value(),
+            "--port" => a.init.port = value().parse().unwrap_or_else(|_| usage_error("--port is 1 to 65535")),
+            "--gateway" => a.init.gateway = value(),
             "-h" | "--help" => {
                 println!("{USAGE}");
                 exit(0)
@@ -111,6 +126,7 @@ fn main() {
             }
         },
         "image" => image(args),
+        "init" => init(args),
         c => usage_error(&format!("unknown command {c}")),
     }
 }
@@ -133,6 +149,20 @@ fn image(args: Args) {
     // The manifest as it was read and checked, byte for byte.
     write("manifest.yaml", &std::fs::read(&args.manifest).unwrap_or_else(|e| fail(format!("{}: {e}", args.manifest.display()))));
     write("Dockerfile", dockerfile.as_bytes());
+}
+
+/// Writes the config directory a box runs from by hand (docs/USER.md, Running a box by hand).
+fn init(args: Args) {
+    if args.init.image.is_empty() {
+        usage_error("init needs --image")
+    }
+    match fleetbox::init::init(&args.config_dir, &args.manifest, &args.init) {
+        Ok(done) => done.iter().for_each(|l| println!("{l}")),
+        Err(e) => {
+            logs::say(e.to_string());
+            exit(2)
+        }
+    }
 }
 
 fn run(args: Args) {

@@ -11,6 +11,7 @@ fleetbox [run] [--manifest PATH] [--uni-config PATH] [--run-dir DIR] [--fail-fas
 fleetbox check [--manifest PATH]
 fleetbox health [--run-dir DIR]
 fleetbox image --lock PATH [--manifest PATH] --out DIR
+fleetbox init --image IMAGE [--config-dir DIR] [--manifest PATH] [--domain NAME] [--port N] [--gateway NAME]
 ```
 
 | Flag | Default | What |
@@ -21,12 +22,18 @@ fleetbox image --lock PATH [--manifest PATH] --out DIR
 | `--fail-fast` | off | exit on the first crash of any service instead of restarting it: for tests |
 | `--lock` | none | `image`: the fleet's box lock ([The image](#the-image)) |
 | `--out` | none | `image`: the directory the box's build context is written to |
+| `--image` | none | `init`: the box's image, which `compose.yaml` runs ([Running a box by hand](#running-a-box-by-hand)) |
+| `--config-dir` | `/config` | `init`: the config directory it writes, which must exist |
+| `--domain` | `localhost` | `init`: the fleet's domain, the uni-config's `operator.fqdn` |
+| `--port` | `8443` | `init`: the gateway's port on the host, the uni-config's `operator.port` |
+| `--gateway` | `gateway` | `init`: the manifest's gateway service, whose first port is the one published |
 
 - `run` (the default) runs the box until it is stopped by a signal, or until it fails.
 - `check` validates a manifest and prints its start order. The fleet build can run it on the manifest it writes.
 - `health` prints the box's state and each service's, and exits 0 only when the box is healthy. It is the
   image's `HEALTHCHECK`.
 - `image` writes a box's build context from its box lock and manifest ([The image](#the-image)).
+- `init` writes the config directory a box runs from by hand ([Running a box by hand](#running-a-box-by-hand)).
 
 Exit status:
 
@@ -34,7 +41,7 @@ Exit status:
 |---|---|
 | 0 | stopped by SIGTERM or SIGINT, with every service stopped (`health`: the box is healthy) |
 | 1 | the kernel died or was never ready, or with `--fail-fast` a service crashed or was never ready. Every service is stopped first. (`health`: the box is not healthy.) |
-| 2 | a usage, manifest, uni-config or box lock error. Nothing was started (`image`: nothing was written). |
+| 2 | a usage, manifest, uni-config, box lock or `init` error. Nothing was started (`image`, `init`: nothing was written). |
 
 ## The manifest
 
@@ -283,6 +290,44 @@ belong to root: a service cannot change its own binary.
 `65532`, its gateway answering on its published port, its Java service on the image's runtime, and it must stop
 with status 0 on SIGTERM. It needs Docker and a registry to push the fleetbox image to, for its digest
 (`REGISTRY`, `localhost:5000`): the image workflow runs it on arm64 for every change.
+
+## Running a box by hand
+
+A box needs no pipeline: `fleetbox init`, run from the box's own image so the host needs only Docker, writes a config
+directory, and `docker compose` starts and stops the box from it.
+
+```sh
+mkdir fleetbox
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> init --image <box> [--domain NAME] [--port N]
+docker compose -f fleetbox/compose.yaml up -d     # or `docker compose up -d` in fleetbox/
+docker compose -f fleetbox/compose.yaml down
+```
+
+| File | Mode | What |
+|---|---|---|
+| `uni-config.yaml` | 0600 | the fleet's deployment config, in the uni-config's shape ([Config](#config)): one format for a box and a cluster. `operator.fqdn` is `--domain`, `operator.port` is `--port`; `services` and `secrets` are empty, so every service runs on its defaults. |
+| `manifest.yaml` | 0644 | the box's manifest (`--manifest`, by default the image's own), byte for byte, checked first |
+| `compose.yaml` | 0644 | the box, below |
+| `admin.yaml` | 0600 | the admin account: `username` (`admin`) and a random `password` of 32 letters and digits |
+| `.gitignore` | 0644 | `admin.yaml` |
+
+- **Every file is the config directory's owner's:** a person, or an automated test, which then reads `admin.yaml` to
+  sign in. Run as that owner (`--user $(id -u):$(id -g)`, as above), `init` writes them as itself; run as root, it
+  gives each to the directory's owner. It refuses to run as anyone else (the image's own user, without `--user`), and
+  a directory of root's (the one `docker run -v` makes when there is none), whose box would run as root: make it first.
+- **`admin.yaml` is written once** and never overwritten, nor ever regenerated: it never goes in a repository.
+  Nothing in the box reads it yet; `init --keycloak` (#5) will make it the Keycloak realm's first user.
+- **Re-running `init` regenerates every other file**, from its flags: what was edited in them is replaced.
+- Everything is checked before anything is written: the manifest, the gateway service and its port, the flags.
+
+`compose.yaml` runs one service, `box`: the box's image (`--image`), as the config directory's owner, so it reads the
+uni-config that is that owner's alone; the directory mounted read-only at `/config` and the box run from its manifest
+and uni-config; the supervisor's run directory a tmpfs of its user's alone; the config's port published on the
+gateway service's first port, and no other; no capability and no new privilege; a stop grace period of every
+service's stop timeout plus 10 seconds, since the supervisor stops them one at a time; and `restart: unless-stopped`.
+
+The box renders no per-process bootstrap config yet (the kernel's addresses, its token, the PKI): the uni-config has
+no PKI to give it (PROPOSALS.md).
 
 ## Building
 

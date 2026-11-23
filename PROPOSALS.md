@@ -33,3 +33,13 @@ Loopers propose here; Jody decides, and an accepted proposal becomes a ROADMAP l
   service that keeps state on disk (the kernel's `/app/data`, stratum's) needs its own, owned by the box's user,
   and a volume to outlive the container. The end-to-end check (#3) will show which; a manifest field (`data:`), or
   the supervisor making `<data-dir>/<service>` and passing it as `{data}`, would give it.
+- **`fleetbox init` keeps what was set in the uni-config.** Re-running `init` regenerates `uni-config.yaml` from its
+  flags (#4, as the issue asks), so a service's config or a secret added to it by hand is lost. Once boxes carry real
+  service config, `init` could keep an existing file's `services` and `secrets` and rewrite only `operator.fqdn` and
+  `operator.port`, or read them from a file of their own beside it.
+- **`init` without `--image`.** A container cannot name its own image, so `init` takes the box's image as a flag and
+  the README's command names it twice. `fleetbox image` could write the box's reference into the box (an `ENV` or a
+  file under `/etc/fleetbox`) once the fleet build tags the box it builds, and `init` default to it.
+- **`init` and `compose.yaml` run for real.** No gate has Docker, so `compose.yaml` is checked as YAML, not run. The
+  end-to-end check (#3) runs `init`, `docker compose up` and `down`; until it does, the tmpfs options
+  (`uid=`, `gid=`, `mode=`) and the box running as the directory's owner are unchecked on Docker Desktop.
