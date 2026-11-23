@@ -1,7 +1,8 @@
 # Fleetbox
 
 A whole tacplus fleet in one container: kernel, gateway, eventbus, oauth, stratum and the rest run as separate
-processes under a small supervisor.
+processes under a small supervisor. Two purposes: testing with no external OAuth dependency, and a micro fleet
+deployment that runs on minimal resources.
 
 - **Real, not a mock:** the same release binaries a cluster runs, and a real kernel (one Hazelcast member).
 - **It scales:** container → compose → cluster with the same binaries.

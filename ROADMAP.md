@@ -10,6 +10,8 @@ Design: tacplus-dev/roadmap `decisions/fleetbox-2026-11-22.md`.
 - `fleetbox init --keycloak`: a Keycloak realm matching the config and a Keycloak container on its own port, so a box needs no external sign-in provider (#5). Hub, at Jody's request, 2026-11-23.
 - An end-to-end check: init --keycloak, compose up, the admin signs in through Keycloak, a call through the gateway reaches a service, compose down (#3). Hub, at Jody's request, 2026-11-22.
 
+- Minimal resources: the box's footprint measured, published and guarded in CI; the Java services sized from it (#6). Hub, at Jody's request, 2026-11-23.
+
 ## Later
 - The test fixture: one box per test run, per-test tenant isolation, the service under test as an external member, generated per server language by tacplus.
 - amd64.
