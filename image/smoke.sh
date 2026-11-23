@@ -51,7 +51,7 @@ docker image inspect --format '{{json .Config.Healthcheck}}' "$box" | grep -q '"
   fail "$box has no HEALTHCHECK running fleetbox health"
 
 say "runs, with no capability and no new privilege"
-docker run -d --name "$name" --cap-drop ALL --security-opt no-new-privileges -p 127.0.0.1::8443 "$box" > /dev/null
+docker run -d --name "$name" --cap-drop ALL --security-opt no-new-privileges -p 127.0.0.1::8443 "$box" run > /dev/null
 for _ in $(seq 90); do
   status=$(docker inspect --format '{{.State.Status}} {{.State.Health.Status}}' "$name")
   case "$status" in

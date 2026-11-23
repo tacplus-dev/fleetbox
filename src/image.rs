@@ -210,7 +210,8 @@ pub fn dockerfile(lock: &Lock, m: &Manifest) -> Result<String, Error> {
          CMD [\"{SUPERVISOR}\", \"health\"]\n",
         start_period(m)
     ));
-    d.push_str(&format!("ENTRYPOINT [\"{SUPERVISOR}\"]\nCMD [\"run\"]\n"));
+    // No command: the supervisor's default, init, is the box's default action; compose.yaml and start.sh run `run`.
+    d.push_str(&format!("ENTRYPOINT [\"{SUPERVISOR}\"]\n"));
     Ok(d)
 }
 

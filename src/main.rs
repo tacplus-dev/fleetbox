@@ -12,11 +12,11 @@ use std::path::PathBuf;
 use std::process::exit;
 
 const USAGE: &str = "usage:
-  fleetbox [run] [--manifest PATH] [--uni-config PATH] [--run-dir DIR] [--fail-fast]
+  fleetbox [init] --image IMAGE [--config-dir DIR] [--manifest PATH] [--domain NAME] [--port N] [--gateway NAME]
+  fleetbox run [--manifest PATH] [--uni-config PATH] [--run-dir DIR] [--fail-fast]
   fleetbox check [--manifest PATH]
   fleetbox health [--run-dir DIR]
   fleetbox image --lock PATH [--manifest PATH] --out DIR
-  fleetbox init --image IMAGE [--config-dir DIR] [--manifest PATH] [--domain NAME] [--port N] [--gateway NAME]
 
   --manifest PATH     the fleet build's manifest (default /etc/fleetbox/manifest.yaml)
   --uni-config PATH   the deployment's uni-config, each service's config is rendered from
@@ -24,7 +24,7 @@ const USAGE: &str = "usage:
   --fail-fast         exit on the first crash of any service instead of restarting it (for tests)
   --lock PATH         image: the fleet's box lock, every image by digest
   --out DIR           image: where the box's Dockerfile and manifest.yaml (its build context) are written
-  --image IMAGE       init: the box's image, which compose.yaml runs
+  --image IMAGE       init: the box's image, which compose.yaml and start.sh run
   --config-dir DIR    init: the config directory it writes, which must exist (default /config)
   --domain NAME       init: the fleet's domain (default localhost)
   --port N            init: the gateway's port on the host (default 8443)
@@ -52,7 +52,8 @@ fn usage_error(msg: &str) -> ! {
 
 fn parse_args() -> Args {
     let mut a = Args {
-        command: "run".into(),
+        // The image's default action: given flags alone, it writes the config directory and exits.
+        command: "init".into(),
         manifest: "/etc/fleetbox/manifest.yaml".into(),
         uni_config: None,
         run_dir: "/run/fleetbox".into(),

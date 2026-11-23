@@ -114,7 +114,7 @@ fn runs_a_box_and_stops_it_on_sigterm() {
     let uni = d.join("uni-config.yaml");
     std::fs::write(&uni, "services:\n  app: \"greeting: hi\\n\"\nsecrets:\n  app: {token: s3cret}\n").unwrap();
 
-    let box_ = spawn(&["--manifest", m.to_str().unwrap(), "--uni-config", uni.to_str().unwrap(), "--run-dir", run_dir.to_str().unwrap()]);
+    let box_ = spawn(&["run", "--manifest", m.to_str().unwrap(), "--uni-config", uni.to_str().unwrap(), "--run-dir", run_dir.to_str().unwrap()]);
     wait_healthy(&run_dir);
     std::thread::sleep(Duration::from_millis(500));
     let pid = box_.child.id();
@@ -140,7 +140,7 @@ fn sigint_stops_it_too() {
     let kernel = r#"trap 'echo got INT; exit 0' INT; while :; do sleep 0.05; done"#;
     let m = manifest(dir.path(), &format!("  - name: kernel\n    binary: /bin/sh\n    args: [\"-c\", {kernel:?}]\n"));
     let run_dir = dir.path().join("run");
-    let box_ = spawn(&["--manifest", m.to_str().unwrap(), "--run-dir", run_dir.to_str().unwrap()]);
+    let box_ = spawn(&["run", "--manifest", m.to_str().unwrap(), "--run-dir", run_dir.to_str().unwrap()]);
     wait_healthy(&run_dir);
     box_.signal(libc::SIGINT);
     let (code, out, err) = box_.finish();
@@ -156,7 +156,7 @@ fn fail_fast_exits_1_on_a_crash() {
         "  - name: kernel\n    binary: /bin/sh\n    args: [\"-c\", \"while :; do sleep 0.05; done\"]\n  - name: app\n    binary: /bin/sh\n    args: [\"-c\", \"sleep 0.2; exit 4\"]\n",
     );
     let run_dir = dir.path().join("run");
-    let (code, _, err) = spawn(&["--manifest", m.to_str().unwrap(), "--run-dir", run_dir.to_str().unwrap(), "--fail-fast"]).finish();
+    let (code, _, err) = spawn(&["run", "--manifest", m.to_str().unwrap(), "--run-dir", run_dir.to_str().unwrap(), "--fail-fast"]).finish();
     assert_eq!(code, 1, "{err}");
     assert!(err.contains("fleetbox | failed: app crashed: exited 4 (--fail-fast)\n"), "{err}");
 }
@@ -165,7 +165,7 @@ fn fail_fast_exits_1_on_a_crash() {
 fn a_bad_manifest_exits_2_before_anything_starts() {
     let dir = tempfile::tempdir().unwrap();
     let m = manifest(dir.path(), "  - name: kernel\n    binary: /bin/sh\n    depends_on: [kernel]\n");
-    let (code, _, err) = spawn(&["--manifest", m.to_str().unwrap(), "--run-dir", dir.path().join("run").to_str().unwrap()]).finish();
+    let (code, _, err) = spawn(&["run", "--manifest", m.to_str().unwrap(), "--run-dir", dir.path().join("run").to_str().unwrap()]).finish();
     assert_eq!(code, 2);
     assert!(err.contains("depends on itself"), "{err}");
 
@@ -218,13 +218,14 @@ fn init_writes_a_config_directory_and_keeps_its_admin_account() {
     let d = dir.path();
     let m = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/image/manifest.yaml");
     let init = |extra: &[&str]| {
-        let mut args = vec!["init", "--config-dir", d.to_str().unwrap(), "--manifest", m.to_str().unwrap()];
+        // Init is the default action: what the image runs given flags alone.
+        let mut args = vec!["--config-dir", d.to_str().unwrap(), "--manifest", m.to_str().unwrap()];
         args.extend_from_slice(extra);
         Command::new(BIN).args(args).output().unwrap()
     };
     let o = init(&["--image", "fleetbox-box:test", "--port", "9443", "--domain", "box.test"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-    for f in ["admin.yaml", "uni-config.yaml", "manifest.yaml", "compose.yaml", ".gitignore"] {
+    for f in ["admin.yaml", "uni-config.yaml", "manifest.yaml", "compose.yaml", "start.sh", "stop.sh", ".gitignore"] {
         assert!(d.join(f).is_file(), "no {f}");
     }
     let compose = std::fs::read_to_string(d.join("compose.yaml")).unwrap();
@@ -242,4 +243,19 @@ fn init_writes_a_config_directory_and_keeps_its_admin_account() {
         let o = init(bad);
         assert_eq!(o.status.code(), Some(2), "{bad:?}");
     }
+    let o = Command::new(BIN).args(["init", "--config-dir", d.to_str().unwrap(), "--manifest", m.to_str().unwrap(), "--image", "b"]).output().unwrap();
+    assert!(o.status.success(), "init by its name too: {}", String::from_utf8_lossy(&o.stderr));
+}
+
+#[test]
+fn with_no_mount_init_says_where_the_config_directory_goes() {
+    let dir = tempfile::tempdir().unwrap();
+    let (missing, m) = (dir.path().join("config"), Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/image/manifest.yaml"));
+    let o = Command::new(BIN)
+        .args(["--config-dir", missing.to_str().unwrap(), "--manifest", m.to_str().unwrap(), "--image", "b"])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    let e = String::from_utf8_lossy(&o.stderr);
+    assert!(e.contains("-v") && e.contains(":/config"), "{e}");
 }

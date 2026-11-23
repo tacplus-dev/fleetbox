@@ -108,7 +108,8 @@ fn runs_as_the_unprivileged_user_with_the_supervisor_as_entrypoint_and_its_healt
     let d = build(&lock(), MANIFEST).unwrap();
     assert!(d.lines().any(|l| l == "USER 65532:65532"), "{d}");
     assert!(d.lines().any(|l| l == r#"ENTRYPOINT ["/usr/local/bin/fleetbox"]"#), "{d}");
-    assert!(d.lines().any(|l| l == r#"CMD ["run"]"#), "{d}");
+    // No command: the supervisor's default action, init, is the image's (docs/USER.md, Running a box by hand).
+    assert!(!d.lines().any(|l| l.starts_with("CMD")), "{d}");
     let hc = d.lines().find(|l| l.starts_with("HEALTHCHECK")).unwrap();
     assert!(hc.ends_with(r#"CMD ["/usr/local/bin/fleetbox", "health"]"#), "{hc}");
 }

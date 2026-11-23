@@ -1,6 +1,6 @@
 # The fleetbox image: the supervisor on a Java runtime, as the box's user. A fleet's box is built on it by digest
 # (`fleetbox image`, docs/USER.md: The image), which adds each service's files from its release image and the
-# manifest; on its own it runs a box from a manifest mounted at /etc/fleetbox/manifest.yaml.
+# manifest; on its own, `run` runs a box from a manifest mounted at /etc/fleetbox/manifest.yaml.
 #
 # Every base is pinned by its multi-arch index digest, the tag it was resolved from beside it: a fix in a base
 # reaches the image only when its digest moves, in a commit of its own.
@@ -37,5 +37,6 @@ COPY --from=build --chown=65532:65532 --chmod=0700 /out/run/fleetbox /run/fleetb
 USER 65532:65532
 HEALTHCHECK --interval=10s --timeout=5s --start-period=300s --start-interval=2s --retries=3 \
   CMD ["/usr/local/bin/fleetbox", "health"]
+# No command: the supervisor's default action, init, is the image's: given flags, it writes the config directory at
+# /config and exits (docs/USER.md, Running a box by hand). `run` runs the box.
 ENTRYPOINT ["/usr/local/bin/fleetbox"]
-CMD ["run"]

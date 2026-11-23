@@ -33,20 +33,33 @@ unprivileged user) with each service's files copied from its release image by di
 
 ## Running a box by hand
 
-From nothing to a running box, with Docker alone (`<box>` is a fleet's box image):
+From nothing to a running box, on any container runtime (`<box>` is a fleet's box image). Run with flags alone, the
+image writes the config directory and exits; Compose or the directory's `start.sh` then runs the box.
 
 ```sh
 mkdir fleetbox
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> init --image <box>
-docker compose -f fleetbox/compose.yaml up -d
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box>
+docker compose -f fleetbox/compose.yaml up -d          # or ./fleetbox/start.sh
 ```
 
-`fleetbox init` writes the config directory, every file yours: the fleet's deployment config in the uni-config's shape
-(`uni-config.yaml`), the box's manifest, `compose.yaml` (the gateway on 8443; `--port`, `--domain`) and `admin.yaml`,
-the admin account with a random password, readable by you alone. **`admin.yaml` never goes in a repository** (the
-directory's `.gitignore` leaves it out). Re-running `init` regenerates everything but `admin.yaml`.
-`docker compose -f fleetbox/compose.yaml down` stops the box. The rest:
-[docs/USER.md](docs/USER.md#running-a-box-by-hand).
+Rootless Podman, which must map you to yourself (`keep-id`):
+
+```sh
+mkdir fleetbox
+podman run --rm --userns=keep-id --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box>
+FLEETBOX_USERNS=keep-id podman compose -f fleetbox/compose.yaml up -d    # or ./fleetbox/start.sh
+```
+
+nerdctl: `nerdctl run` and `nerdctl compose`, as Docker's. Apple's `container`: `container run`, as Docker's, then
+`./fleetbox/start.sh`. `start.sh` uses `$FLEETBOX_RUNTIME` if set, else the first of `docker`, `podman`, `nerdctl`
+and `container` it finds, and says which.
+
+The directory, every file yours: the fleet's deployment config in the uni-config's shape (`uni-config.yaml`), the
+box's manifest, `compose.yaml` (the Compose specification alone, so any Compose implementation runs it), `start.sh`
+and `stop.sh` (the gateway on 8443; `--port`, `--domain`), and `admin.yaml`, the admin account with a random password,
+readable by you alone. **`admin.yaml` never goes in a repository** (the directory's `.gitignore` leaves it out).
+Re-running the image regenerates everything but `admin.yaml`. Compose `down`, or `./fleetbox/stop.sh`, stops the box.
+The rest: [docs/USER.md](docs/USER.md#running-a-box-by-hand).
 
 ## Building
 
@@ -54,5 +67,6 @@ The gates, `just gates` ([justfile](justfile)): `cargo build --all-targets --loc
 tests run the supervisor against stand-in child processes (`/bin/sh` scripts), in process (`src/*_tests.rs`) and as
 the binary a container runs (`tests/binary.rs`, which signals it and reads its output). fleetbox is no tacplus project:
 it has no `tacplus.yaml` and generates nothing. The image's check, `just smoke` (image/smoke.sh), needs Docker, which no
-gate has: the image workflow runs it, on arm64. The security checks' cargo-deny reads [deny.toml](deny.toml),
+gate has: the image workflow runs it, on arm64. Running a box by hand, `just byhand docker` and
+`just byhand podman` (image/byhand.sh), needs a runtime too, and the box the smoke builds. The security checks' cargo-deny reads [deny.toml](deny.toml),
 looper-scan's default policy.

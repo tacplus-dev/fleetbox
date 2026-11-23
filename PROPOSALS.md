@@ -40,6 +40,18 @@ Loopers propose here; Jody decides, and an accepted proposal becomes a ROADMAP l
 - **`init` without `--image`.** A container cannot name its own image, so `init` takes the box's image as a flag and
   the README's command names it twice. `fleetbox image` could write the box's reference into the box (an `ENV` or a
   file under `/etc/fleetbox`) once the fleet build tags the box it builds, and `init` default to it.
-- **`init` and `compose.yaml` run for real.** No gate has Docker, so `compose.yaml` is checked as YAML, not run. The
-  end-to-end check (#3) runs `init`, `docker compose up` and `down`; until it does, the tmpfs options
-  (`uid=`, `gid=`, `mode=`) and the box running as the directory's owner are unchecked on Docker Desktop.
+- **`init`, `compose.yaml` and `start.sh` run for real in CI.** No gate has a container runtime, so the files are
+  checked as YAML and the scripts against stand-in runtimes. `image/byhand.sh` runs them for real (init, `start.sh`,
+  `stop.sh`, Compose `up` and `down`) on Docker and on rootless Podman, with the smoke's box; the image workflow
+  (#2's `.github/workflows/image.yml`, which origin takes from the looper only on an issue labelled
+  `looper:workflows`) would run it after the smoke: `just byhand docker`, then `docker save fleetbox-box:smoke |
+  podman load`, `pip install podman-compose` and `just byhand podman`. Until it does, the tmpfs options (`uid=`,
+  `gid=`, `mode=`), `userns_mode` from `$FLEETBOX_USERNS` and the box running as the directory's owner are unchecked
+  on any runtime.
+- **Rootless Docker and rootless nerdctl.** There the container's root is you, and the user `--user $(id -u)` names is
+  one of your subordinate ids, so your directory is root's inside: `init` refuses it, and a box as your id could not
+  read its uni-config. Neither has keep-id. `init` could take `--rootless`, writing a box that runs as root inside,
+  which is you outside.
+- **Apple's `container`, checked.** `start.sh` runs it with `--user`, a plain `--tmpfs` and none of the hardening keys
+  it lacks, untested: whether its shared directories show your files as yours, and whether a plain tmpfs is writable
+  by the box's user, need a Mac. A run on one, and `byhand.sh` taking `container`, would settle it.

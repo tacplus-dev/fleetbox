@@ -27,5 +27,10 @@ gates: check-tracked test
 smoke:
   image/smoke.sh
 
+# Running a box by hand (image/byhand.sh): init, start.sh, stop.sh, Compose up and down, with the test box the smoke
+# builds, on RUNTIME (docker, or podman, rootless too). Like the smoke, it needs a container runtime: no gate runs it.
+byhand runtime="docker" box="fleetbox-box:smoke":
+  image/byhand.sh {{box}} {{runtime}}
+
 clean:
   rm -rf target

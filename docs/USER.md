@@ -7,11 +7,11 @@ tacplus-dev/roadmap `decisions/fleetbox-2026-11-22.md`.
 ## Running it
 
 ```sh
-fleetbox [run] [--manifest PATH] [--uni-config PATH] [--run-dir DIR] [--fail-fast]
+fleetbox [init] --image IMAGE [--config-dir DIR] [--manifest PATH] [--domain NAME] [--port N] [--gateway NAME]
+fleetbox run [--manifest PATH] [--uni-config PATH] [--run-dir DIR] [--fail-fast]
 fleetbox check [--manifest PATH]
 fleetbox health [--run-dir DIR]
 fleetbox image --lock PATH [--manifest PATH] --out DIR
-fleetbox init --image IMAGE [--config-dir DIR] [--manifest PATH] [--domain NAME] [--port N] [--gateway NAME]
 ```
 
 | Flag | Default | What |
@@ -22,18 +22,19 @@ fleetbox init --image IMAGE [--config-dir DIR] [--manifest PATH] [--domain NAME]
 | `--fail-fast` | off | exit on the first crash of any service instead of restarting it: for tests |
 | `--lock` | none | `image`: the fleet's box lock ([The image](#the-image)) |
 | `--out` | none | `image`: the directory the box's build context is written to |
-| `--image` | none | `init`: the box's image, which `compose.yaml` runs ([Running a box by hand](#running-a-box-by-hand)) |
+| `--image` | none | `init`: the box's image, which `compose.yaml` and `start.sh` run ([Running a box by hand](#running-a-box-by-hand)) |
 | `--config-dir` | `/config` | `init`: the config directory it writes, which must exist |
 | `--domain` | `localhost` | `init`: the fleet's domain, the uni-config's `operator.fqdn` |
 | `--port` | `8443` | `init`: the gateway's port on the host, the uni-config's `operator.port` |
 | `--gateway` | `gateway` | `init`: the manifest's gateway service, whose first port is the one published |
 
-- `run` (the default) runs the box until it is stopped by a signal, or until it fails.
+- `init` (the default, and so the image's default action) writes the config directory a box runs from by hand, and
+  exits ([Running a box by hand](#running-a-box-by-hand)).
+- `run` runs the box until it is stopped by a signal, or until it fails.
 - `check` validates a manifest and prints its start order. The fleet build can run it on the manifest it writes.
 - `health` prints the box's state and each service's, and exits 0 only when the box is healthy. It is the
   image's `HEALTHCHECK`.
 - `image` writes a box's build context from its box lock and manifest ([The image](#the-image)).
-- `init` writes the config directory a box runs from by hand ([Running a box by hand](#running-a-box-by-hand)).
 
 Exit status:
 
@@ -238,14 +239,14 @@ A fleet's box is one image, built in two layers of images, every one by digest a
 ```sh
 fleetbox image --lock box.lock --manifest manifest.yaml --out box/
 docker build --platform linux/arm64 -t <fleet>-box box/
-docker run -p 8443:8443 <fleet>-box [run] [--uni-config PATH] [--fail-fast]
+docker run -p 8443:8443 <fleet>-box run [--uni-config PATH] [--fail-fast]
 ```
 
 The box runs as `65532:65532` (distroless's `nonroot`), needs no capability (it runs with `--cap-drop ALL` and
 `no-new-privileges`), exposes the gateway's ports alone (the services talk to each other inside it), and its
 `HEALTHCHECK` is `fleetbox health` ([Health](#health)), with a start period of the manifest's longest chain of
-readiness timeouts. Its entrypoint is the supervisor and its command `run`: arguments after the image replace `run`
-(`--uni-config`, `--fail-fast`). arm64 first (the cluster and Jody's Macs are arm64); amd64 is on the roadmap.
+readiness timeouts. Its entrypoint is the supervisor, with no command: given flags alone it runs `init`
+([Running a box by hand](#running-a-box-by-hand)), and `run` runs the box (`--uni-config`, `--fail-fast`). arm64 first (the cluster and Jody's Macs are arm64); amd64 is on the roadmap.
 
 ### The box lock
 
@@ -293,21 +294,34 @@ with status 0 on SIGTERM. It needs Docker and a registry to push the fleetbox im
 
 ## Running a box by hand
 
-A box needs no pipeline: `fleetbox init`, run from the box's own image so the host needs only Docker, writes a config
-directory, and `docker compose` starts and stops the box from it.
+A box needs no pipeline, and no Docker in particular: any container runtime runs it. The box's image, run with flags
+alone, runs `init`: it writes a config directory and exits. Compose (`up`, `down`) or the directory's `start.sh` and
+`stop.sh` then start and stop the box from it; either one, not both.
 
 ```sh
 mkdir fleetbox
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> init --image <box> [--domain NAME] [--port N]
-docker compose -f fleetbox/compose.yaml up -d     # or `docker compose up -d` in fleetbox/
-docker compose -f fleetbox/compose.yaml down
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box> [--domain NAME] [--port N]
+docker compose -f fleetbox/compose.yaml up -d     # or ./fleetbox/start.sh
+docker compose -f fleetbox/compose.yaml down      # or ./fleetbox/stop.sh
 ```
+
+| Runtime | init | start | stop |
+|---|---|---|---|
+| Docker | `docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box>` | `docker compose -f fleetbox/compose.yaml up -d` | `docker compose -f fleetbox/compose.yaml down` |
+| Podman, rootless | `podman run --rm --userns=keep-id --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box>` | `FLEETBOX_USERNS=keep-id podman compose -f fleetbox/compose.yaml up -d` | `FLEETBOX_USERNS=keep-id podman compose -f fleetbox/compose.yaml down` |
+| Podman, as root | `podman run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box>` | `podman compose -f fleetbox/compose.yaml up -d` | `podman compose -f fleetbox/compose.yaml down` |
+| nerdctl (containerd) | `nerdctl run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box>` | `nerdctl compose -f fleetbox/compose.yaml up -d` | `nerdctl compose -f fleetbox/compose.yaml down` |
+| Apple's `container` | `container run --rm --user "$(id -u):$(id -g)" -v "$PWD/fleetbox:/config" <box> --image <box>` | `./fleetbox/start.sh` | `./fleetbox/stop.sh` |
+
+`./fleetbox/start.sh` and `./fleetbox/stop.sh` work with every one of them (below). The image cannot name itself, so
+`--image` names the box `compose.yaml` and `start.sh` run (PROPOSALS.md).
 
 | File | Mode | What |
 |---|---|---|
 | `uni-config.yaml` | 0600 | the fleet's deployment config, in the uni-config's shape ([Config](#config)): one format for a box and a cluster. `operator.fqdn` is `--domain`, `operator.port` is `--port`; `services` and `secrets` are empty, so every service runs on its defaults. |
 | `manifest.yaml` | 0644 | the box's manifest (`--manifest`, by default the image's own), byte for byte, checked first |
-| `compose.yaml` | 0644 | the box, below |
+| `compose.yaml` | 0644 | the box, for any Compose implementation (below) |
+| `start.sh`, `stop.sh` | 0755 | the same box without Compose, on any runtime (below) |
 | `admin.yaml` | 0600 | the admin account: `username` (`admin`) and a random `password` of 32 letters and digits |
 | `.gitignore` | 0644 | `admin.yaml` |
 
@@ -315,16 +329,31 @@ docker compose -f fleetbox/compose.yaml down
   sign in. Run as that owner (`--user $(id -u):$(id -g)`, as above), `init` writes them as itself; run as root, it
   gives each to the directory's owner. It refuses to run as anyone else (the image's own user, without `--user`), and
   a directory of root's (the one `docker run -v` makes when there is none), whose box would run as root: make it first.
+  Rootless Podman shows your directory as root's unless it maps you to yourself: `--userns=keep-id`, as above.
 - **`admin.yaml` is written once** and never overwritten, nor ever regenerated: it never goes in a repository.
   Nothing in the box reads it yet; `init --keycloak` (#5) will make it the Keycloak realm's first user.
 - **Re-running `init` regenerates every other file**, from its flags: what was edited in them is replaced.
 - Everything is checked before anything is written: the manifest, the gateway service and its port, the flags.
 
-`compose.yaml` runs one service, `box`: the box's image (`--image`), as the config directory's owner, so it reads the
-uni-config that is that owner's alone; the directory mounted read-only at `/config` and the box run from its manifest
-and uni-config; the supervisor's run directory a tmpfs of its user's alone; the config's port published on the
-gateway service's first port, and no other; no capability and no new privilege; a stop grace period of every
-service's stop timeout plus 10 seconds, since the supervisor stops them one at a time; and `restart: unless-stopped`.
+`compose.yaml` runs one service, `box`, in the Compose specification's keys alone, so `docker compose`, `podman
+compose` (or `podman-compose`) and `nerdctl compose` all run it: the box's image (`--image`) with the command `run`, as
+the config directory's owner, so it reads the uni-config that is that owner's alone; the directory mounted read-only
+at `/config` and the box run from its manifest and uni-config; the supervisor's run directory a tmpfs of its user's
+alone; the config's port published on the gateway service's first port, and no other; no capability and no new
+privilege; a stop grace period of every service's stop timeout plus 10 seconds, since the supervisor stops them one at
+a time; and `restart: unless-stopped`. Its `userns_mode` is `$FLEETBOX_USERNS`, empty unless set: rootless Podman's
+`keep-id`, which no other runtime has.
+
+`start.sh` runs the same box without Compose, as the container `$FLEETBOX_NAME` (`fleetbox`), on `$FLEETBOX_RUNTIME`
+if it is set, else on the first of `docker`, `podman`, `nerdctl` and `container` it finds, and says which. It removes
+a stopped box of that name first. Under rootless Podman it adds `--userns keep-id` itself. Apple's `container` runs
+each container in a virtual machine of its own, with no capability, restart policy or stop timeout to set, so there
+it sets none. `stop.sh` stops the box on the same runtime, within the grace period, and removes it.
+
+`image/byhand.sh` (`just byhand docker`, `just byhand podman`) runs all of it, as above, with the test box the
+smoke builds: init and its files, `start.sh` to a healthy box running as the directory's owner and answering on the
+gateway's port, `stop.sh`, a re-run keeping `admin.yaml`, and Compose `up` and `down`. Like the smoke it needs a
+container runtime, which no gate has.
 
 The box renders no per-process bootstrap config yet (the kernel's addresses, its token, the PKI): the uni-config has
 no PKI to give it (PROPOSALS.md).
