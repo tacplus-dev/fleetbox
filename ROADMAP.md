@@ -6,7 +6,9 @@ Design: tacplus-dev/roadmap `decisions/fleetbox-2026-11-22.md`.
 ## Now
 - The supervisor: a Rust PID 1 that reads the fleet build's manifest, starts the kernel then each service in order, waits on readiness, forwards signals, restarts with backoff (`--fail-fast` for tests) (#1). Hub, at Jody's request, 2026-11-22.
 - The image: the services' release binaries by digest, a Java runtime, the manifest; arm64; only the gateway's port exposed (#2). Hub, at Jody's request, 2026-11-22.
-- An end-to-end check: a box from a small fleet starts, a call through the gateway reaches a service, the box stops cleanly (#3). Hub, at Jody's request, 2026-11-22.
+- `fleetbox init`: a config directory (uni-config, manifest, admin account file, compose.yaml) to run a box by hand with `docker compose up` (#4). Hub, at Jody's request, 2026-11-23.
+- `fleetbox init --keycloak`: a Keycloak realm matching the config and a Keycloak container on its own port, so a box needs no external sign-in provider (#5). Hub, at Jody's request, 2026-11-23.
+- An end-to-end check: init --keycloak, compose up, the admin signs in through Keycloak, a call through the gateway reaches a service, compose down (#3). Hub, at Jody's request, 2026-11-22.
 
 ## Later
 - The test fixture: one box per test run, per-test tenant isolation, the service under test as an external member, generated per server language by tacplus.
