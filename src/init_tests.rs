@@ -243,9 +243,9 @@ fn script(d: &Path, name: &str, found: &[&str], env: &[(&str, &str)]) -> (i32, S
     // The supervisor's tests share this process and its reaper, which waits on every child: the script's exit
     // is the reaper's to collect, or `wait` races it and fails with ECHILD.
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut child = crate::reaper::spawn(&mut cmd, move |_, status| tx.send(status).unwrap()).unwrap();
+    let mut pipe = crate::reaper::spawn(&mut cmd, move |_, status| tx.send(status).unwrap()).unwrap().stderr.unwrap();
     let mut stderr = String::new();
-    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    std::io::Read::read_to_string(&mut pipe, &mut stderr).unwrap();
     let status = rx.recv().unwrap();
     let log = std::fs::read_to_string(&log).unwrap_or_default();
     (status.code().unwrap_or(-1), stderr, log.lines().map(String::from).collect())
