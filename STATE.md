@@ -1,6 +1,6 @@
 # State: fleetbox
 
-Last updated: 2026-11-23 by the looper (#4).
+Last updated: 2026-11-26 by the looper (#9).
 
 **Version:** none released.
 
@@ -11,7 +11,9 @@ SIGKILL, and reaps every child and orphan. It restarts a crashed service with ex
 unhealthy after repeated crashes (`status.json`, `fleetbox health`). It exits 1 if the kernel dies, or with
 `--fail-fast` on any crash. Each service's log lines are prefixed with its name on stdout/stderr. Each service's
 config and secrets are rendered owner-only from the uni-config's YAML/JSON form. `just gates`: build and tests (unit
-tests and the binary's, against stand-in `sh` children).
+tests and the binary's, against stand-in `sh` children). The repository pins its build image (`build.lock`, #9:
+tacplus build 2.6 by digest, Rust 1.100), so its gates run in that image as build jobs, or as a looper VM's local
+builds (looper#71, looper#238), with no container runtime.
 
 The image (#2; docs/USER.md, The image): the fleetbox image (`Dockerfile`: the supervisor on the distroless Java 25
 runtime the kernel runs on, as 65532, its HEALTHCHECK `fleetbox health`), and `fleetbox image`, which writes a box's
