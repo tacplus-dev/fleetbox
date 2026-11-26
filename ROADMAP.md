@@ -11,6 +11,7 @@ Design: tacplus-dev/roadmap `decisions/fleetbox-2026-11-22.md`.
 - An end-to-end check: init --keycloak, compose up, the admin signs in through Keycloak, a call through the gateway reaches a service, compose down (#3). Hub, at Jody's request, 2026-11-22.
 
 - Minimal resources: the box's footprint measured, published and guarded in CI; the Java services sized from it (#6). Hub, at Jody's request, 2026-11-23.
+- Pin the build image with a build.lock (#9; tacplus-dev/looper#73). Hub, on its recommendation with Jody's standing agreement (tp-act-on-recommendations), 2026-11-26.
 
 ## Later
 - The test fixture: one box per test run, per-test tenant isolation, the service under test as an external member, generated per server language by tacplus.
