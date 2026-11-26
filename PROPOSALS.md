@@ -17,11 +17,10 @@ Loopers propose here; Jody decides, and an accepted proposal becomes a ROADMAP l
   bootstrap config (kernel addresses, the kernel token, the PKI). A box needs the same, rendered by the supervisor
   from `operator` and `secrets.pki`. That is part of the image and its end-to-end check (#2, #3), which will show
   exactly what each service needs inside one container.
-- **A `build.lock` (#9).** The gates run in the manager's job (looper#71), and once looper#73 retires that unpinned
-  path a report or land here fails with "pin it first (build.lock)", so #1 to #6 could not be worked. A root
-  `build.lock` pinning tacplus's 2.6 build image by digest (as tacplus and people do; the nightly relock moves it) runs
-  `just gates` unchanged in a build job or a looper VM, with no container runtime; its toolchain must meet the
-  Dockerfile's Rust 1.100. Design on #9.
+- **`rust-version` in Cargo.toml.** The Dockerfile builds on Rust 1.100 and `build.lock` (#9) pins a build image
+  whose Rust meets it, but `Cargo.toml` declares no `rust-version`, so nothing but the gates' outcome says what the
+  crate needs. `rust-version = "1.100"` would make cargo refuse an older toolchain with that message, should the
+  nightly relock ever move the pin to an image with an older Rust (#9's design, question 4).
 - **The fleet build writes the box lock.** `fleetbox image` reads a box lock (docs/USER.md, The box lock: the
   fleetbox image and each service's release image by digest, and the files the box takes from each), because
   `fleet.lock` names commits, not images. With `box: true` in a `fleet.yaml`, `tacplus fleet build` would write it
