@@ -4,6 +4,7 @@
 //! Each line a service writes, prefixed with its name: its stdout on the box's stdout, its stderr on its stderr.
 
 use std::io::{BufRead, BufReader, Read, Write};
+use std::thread::JoinHandle;
 
 /// The box's own lines carry this name.
 pub const SELF: &str = "fleetbox";
@@ -32,15 +33,19 @@ pub fn prefix_lines(name: &str, from: impl Read, mut to: impl Write) {
     }
 }
 
-/// Forwards a child's stream on a thread of its own.
-pub fn forward(name: String, from: impl Read + Send + 'static, stderr: bool) {
-    let _ = std::thread::Builder::new().name(format!("log-{name}")).spawn(move || {
-        if stderr {
-            prefix_lines(&name, from, LockedStderr);
-        } else {
-            prefix_lines(&name, from, LockedStdout);
-        }
-    });
+/// Forwards a child's stream on a thread of its own, which ends at the stream's end: join it before the process
+/// exits, or the child's last lines may be lost.
+pub fn forward(name: String, from: impl Read + Send + 'static, stderr: bool) -> Option<JoinHandle<()>> {
+    std::thread::Builder::new()
+        .name(format!("log-{name}"))
+        .spawn(move || {
+            if stderr {
+                prefix_lines(&name, from, LockedStderr);
+            } else {
+                prefix_lines(&name, from, LockedStdout);
+            }
+        })
+        .ok()
 }
 
 struct LockedStdout;

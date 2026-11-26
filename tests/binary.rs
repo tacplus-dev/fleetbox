@@ -149,6 +149,21 @@ fn sigint_stops_it_too() {
 }
 
 #[test]
+fn a_services_last_lines_arrive_before_it_exits() {
+    let dir = tempfile::tempdir().unwrap();
+    // Its stop writes more lines than a pipe holds and exits at once: the box exits only once each of them is forwarded (#10).
+    let kernel = r#"trap 'i=0; while [ $i -lt 10000 ]; do echo "last $i"; i=$((i+1)); done; exit 0' TERM; while :; do sleep 0.05; done"#;
+    let m = manifest(dir.path(), &format!("  - name: kernel\n    binary: /bin/sh\n    args: [\"-c\", {kernel:?}]\n"));
+    let run_dir = dir.path().join("run");
+    let box_ = spawn(&["run", "--manifest", m.to_str().unwrap(), "--run-dir", run_dir.to_str().unwrap()]);
+    wait_healthy(&run_dir);
+    box_.signal(libc::SIGTERM);
+    let (code, out, err) = box_.finish();
+    assert_eq!(code, 0, "{err}");
+    assert!(out.ends_with("kernel | last 9999\n"), "{} lines on stdout", out.lines().count());
+}
+
+#[test]
 fn fail_fast_exits_1_on_a_crash() {
     let dir = tempfile::tempdir().unwrap();
     let m = manifest(

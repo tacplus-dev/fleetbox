@@ -20,10 +20,13 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 /// How long a service killed with SIGKILL may take to be reaped before the supervisor stops waiting for it.
 const KILL_WAIT: Duration = Duration::from_secs(5);
+/// How long a stopped box waits for its services' last lines.
+const LOG_DRAIN: Duration = Duration::from_secs(2);
 
 pub struct Options {
     /// Exit on the first crash, of any service, instead of restarting it (for tests).
@@ -119,6 +122,8 @@ pub struct Supervisor {
     rx: Receiver<Event>,
     all_ready_once: bool,
     last_status: String,
+    /// The threads forwarding the services' output, drained before the box stops.
+    forwarders: Vec<JoinHandle<()>>,
 }
 
 impl Supervisor {
@@ -150,7 +155,7 @@ impl Supervisor {
             .collect();
         let (tx, rx) = mpsc::channel();
         let handle = Handle(tx.clone());
-        let sup = Supervisor { m, opts, order, svcs, tx, rx, all_ready_once: false, last_status: String::new() };
+        let sup = Supervisor { m, opts, order, svcs, tx, rx, all_ready_once: false, last_status: String::new(), forwarders: Vec::new() };
         Ok((sup, handle))
     }
 
@@ -234,12 +239,14 @@ impl Supervisor {
             }
         };
         let pid = child.id() as i32;
+        self.forwarders.retain(|f| !f.is_finished());
         if let Some(out) = child.stdout.take() {
-            logs::forward(name.to_string(), out, false);
+            self.forwarders.extend(logs::forward(name.to_string(), out, false));
         }
         if let Some(err) = child.stderr.take() {
-            logs::forward(name.to_string(), err, true);
+            self.forwarders.extend(logs::forward(name.to_string(), err, true));
         }
+        let s = self.svc(name);
         s.pid = Some(pid);
         s.started_at = Some(Instant::now());
         s.state = State::Starting;
@@ -419,6 +426,7 @@ impl Supervisor {
                 self.wait_exit(pid, Instant::now() + KILL_WAIT);
             }
         }
+        self.drain_logs(Instant::now() + LOG_DRAIN);
         self.write_status(Some(match outcome {
             Outcome::Stopped(_) => "stopped",
             Outcome::Failed(_) => "failed",
@@ -428,6 +436,14 @@ impl Supervisor {
             Outcome::Failed(why) => logs::say(format!("failed: {why}")),
         }
         outcome
+    }
+
+    /// Waits until every service's output is forwarded, or `deadline` passes: an orphan that left its group may
+    /// hold a stream open.
+    fn drain_logs(&mut self, deadline: Instant) {
+        while self.forwarders.iter().any(|f| !f.is_finished()) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// Waits until `pid` is reaped or `deadline` passes, noting any other service that exits meanwhile.
