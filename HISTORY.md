@@ -7,3 +7,4 @@ Append-only: add entries at the end, never edit or remove one (CI enforces it). 
 - 2026-11-22 looper issue The supervisor: a Rust PID 1 that runs a fleet's services from the fleet build's manifest (#1)
 - 2026-11-24 looper issue Pinned images behind their lines: relock (Dockerfile: rust:1.100.0-slim-trixie → rust:1.100.0-slim-trixie) (#7)
 - 2026-11-25 looper issue Pinned images behind their lines: relock (Dockerfile: rust:1.100.0-slim-trixie → rust:1.100.0-slim-trixie) (#8)
+- 2026-11-26 looper issue Pin the build image: a build.lock, before looper#73 retires the unpinned path (#9)
